@@ -21,6 +21,7 @@ fi
 
 # initialize script variables
 set AUX_MODE                    none
+set AUX_BANK2			none
 set IO_PRESENT                  no
 set MAV_TYPE                    none
 set MIXER                       none
@@ -153,6 +154,8 @@ param set-default SENS_IMU_MODE 0
 param set-default EKF2_MULTI_MAG 2
 param set-default SENS_MAG_MODE 0
 
+param set-default IMU_GYRO_FFT_EN 1
+
 # By default log from boot until first disarm.
 param set-default SDLOG_MODE 1
 # enable default, estimator replay and vision/avoidance logging profiles
@@ -233,6 +236,16 @@ if param greater -s TRIG_MODE 0
 then
 	camera_trigger start
 	camera_feedback start
+fi
+
+if param compare -s IMU_GYRO_FFT_EN 1
+then
+	gyro_fft start
+fi
+
+if param compare -s IMU_GYRO_CAL_EN 1
+then
+	gyro_calibration start
 fi
 
 # Configure vehicle type specific parameters.

@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013-2019 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2021 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -321,9 +321,6 @@ int Commander::custom_command(int argc, char *argv[])
 			} else if (!strcmp(argv[1], "stabilized")) {
 				send_vehicle_command(vehicle_command_s::VEHICLE_CMD_DO_SET_MODE, 1, PX4_CUSTOM_MAIN_MODE_STABILIZED);
 
-			} else if (!strcmp(argv[1], "rattitude")) {
-				send_vehicle_command(vehicle_command_s::VEHICLE_CMD_DO_SET_MODE, 1, PX4_CUSTOM_MAIN_MODE_RATTITUDE);
-
 			} else if (!strcmp(argv[1], "auto:takeoff")) {
 				send_vehicle_command(vehicle_command_s::VEHICLE_CMD_DO_SET_MODE, 1, PX4_CUSTOM_MAIN_MODE_AUTO,
 						     PX4_CUSTOM_SUB_MODE_AUTO_TAKEOFF);
@@ -387,6 +384,7 @@ int Commander::custom_command(int argc, char *argv[])
 int Commander::print_status()
 {
 	PX4_INFO("arming: %s", arming_state_names[_status.arming_state]);
+	PX4_INFO("navigation: %s", nav_state_names[_status.nav_state]);
 	return 0;
 }
 
@@ -663,10 +661,6 @@ Commander::handle_command(const vehicle_command_s &cmd)
 				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_ACRO) {
 					/* ACRO */
 					main_ret = main_state_transition(_status, commander_state_s::MAIN_STATE_ACRO, _status_flags, &_internal_state);
-
-				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_RATTITUDE) {
-					/* RATTITUDE */
-					main_ret = main_state_transition(_status, commander_state_s::MAIN_STATE_RATTITUDE, _status_flags, &_internal_state);
 
 				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_STABILIZED) {
 					/* STABILIZED */
@@ -1752,6 +1746,9 @@ Commander::run()
 			const bool previous_safety_off = _safety.safety_off;
 
 			if (_safety_sub.copy(&_safety)) {
+				set_health_flags(subsystem_info_s::SUBSYSTEM_TYPE_MOTORCONTROL, _safety.safety_switch_available, _safety.safety_off,
+						 _safety.safety_switch_available, _status);
+
 				// disarm if safety is now on and still armed
 				if (_armed.armed && _safety.safety_switch_available && !_safety.safety_off) {
 
@@ -2303,7 +2300,7 @@ Commander::run()
 		}
 
 		/* Check for failure detector status */
-		if (_failure_detector.update(_status)) {
+		if (_failure_detector.update(_status, _vehicle_control_mode)) {
 			_status.failure_detector_status = _failure_detector.getStatus();
 			_status_changed = true;
 
@@ -2482,7 +2479,8 @@ Commander::run()
 
 			// Evaluate current prearm status
 			if (!_armed.armed && !_status_flags.condition_calibration_enabled) {
-				bool preflight_check_res = PreFlightCheck::preflightCheck(nullptr, _status, _status_flags, false, true, 30_s);
+				bool preflight_check_res = PreFlightCheck::preflightCheck(nullptr, _status, _status_flags, false, true,
+							   hrt_elapsed_time(&_boot_timestamp));
 
 				// skip arm authorization check until actual arming attempt
 				PreFlightCheck::arm_requirements_t arm_req = _arm_requirements;
@@ -2790,7 +2788,6 @@ Commander::set_main_state_rc()
 		|| (_last_manual_control_switches.return_switch != _manual_control_switches.return_switch)
 		|| (_last_manual_control_switches.mode_switch != _manual_control_switches.mode_switch)
 		|| (_last_manual_control_switches.acro_switch != _manual_control_switches.acro_switch)
-		|| (_last_manual_control_switches.rattitude_switch != _manual_control_switches.rattitude_switch)
 		|| (_last_manual_control_switches.posctl_switch != _manual_control_switches.posctl_switch)
 		|| (_last_manual_control_switches.loiter_switch != _manual_control_switches.loiter_switch)
 		|| (_last_manual_control_switches.mode_slot != _manual_control_switches.mode_slot)
@@ -3044,16 +3041,6 @@ Commander::set_main_state_rc()
 						res = main_state_transition(_status, commander_state_s::MAIN_STATE_MANUAL, _status_flags, &_internal_state);
 					}
 
-				} else if (_manual_control_switches.rattitude_switch == manual_control_switches_s::SWITCH_POS_ON) {
-					/* Similar to acro transitions for multirotors.  FW aircraft don't need a
-					 * rattitude mode.*/
-					if (_status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING) {
-						res = main_state_transition(_status, commander_state_s::MAIN_STATE_RATTITUDE, _status_flags, &_internal_state);
-
-					} else {
-						res = main_state_transition(_status, commander_state_s::MAIN_STATE_STAB, _status_flags, &_internal_state);
-					}
-
 				} else {
 					res = main_state_transition(_status, commander_state_s::MAIN_STATE_MANUAL, _status_flags, &_internal_state);
 				}
@@ -3068,9 +3055,6 @@ Commander::set_main_state_rc()
 
 				} else if (_manual_control_switches.acro_switch == manual_control_switches_s::SWITCH_POS_ON) {
 					res = main_state_transition(_status, commander_state_s::MAIN_STATE_ACRO, _status_flags, &_internal_state);
-
-				} else if (_manual_control_switches.rattitude_switch == manual_control_switches_s::SWITCH_POS_ON) {
-					res = main_state_transition(_status, commander_state_s::MAIN_STATE_RATTITUDE, _status_flags, &_internal_state);
 
 				} else if (_manual_control_switches.stab_switch == manual_control_switches_s::SWITCH_POS_ON) {
 					res = main_state_transition(_status, commander_state_s::MAIN_STATE_STAB, _status_flags, &_internal_state);
@@ -3251,13 +3235,6 @@ Commander::update_control_mode()
 		_vehicle_control_mode.flag_control_attitude_enabled = true;
 		break;
 
-	case vehicle_status_s::NAVIGATION_STATE_RATTITUDE:
-		_vehicle_control_mode.flag_control_manual_enabled = true;
-		_vehicle_control_mode.flag_control_rates_enabled = true;
-		_vehicle_control_mode.flag_control_attitude_enabled = true;
-		_vehicle_control_mode.flag_control_rattitude_enabled = true;
-		break;
-
 	case vehicle_status_s::NAVIGATION_STATE_ALTCTL:
 		_vehicle_control_mode.flag_control_manual_enabled = true;
 		_vehicle_control_mode.flag_control_rates_enabled = true;
@@ -3360,13 +3337,10 @@ Commander::update_control_mode()
 		_vehicle_control_mode.flag_control_auto_enabled = false;
 		_vehicle_control_mode.flag_control_rates_enabled = true;
 		_vehicle_control_mode.flag_control_attitude_enabled = true;
-		_vehicle_control_mode.flag_control_rattitude_enabled = false;
 		_vehicle_control_mode.flag_control_altitude_enabled = true;
 		_vehicle_control_mode.flag_control_climb_rate_enabled = true;
 		_vehicle_control_mode.flag_control_position_enabled = !_status.in_transition_mode;
 		_vehicle_control_mode.flag_control_velocity_enabled = !_status.in_transition_mode;
-		_vehicle_control_mode.flag_control_acceleration_enabled = false;
-		_vehicle_control_mode.flag_control_termination_enabled = false;
 		break;
 
 	default:
@@ -4059,7 +4033,7 @@ The commander module contains the state machine for mode switching and failsafe 
 	PRINT_MODULE_USAGE_COMMAND("land");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("transition", "VTOL transition");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("mode", "Change flight mode");
-	PRINT_MODULE_USAGE_ARG("manual|acro|offboard|stabilized|rattitude|altctl|posctl|auto:mission|auto:loiter|auto:rtl|auto:takeoff|auto:land|auto:precland",
+	PRINT_MODULE_USAGE_ARG("manual|acro|offboard|stabilized|altctl|posctl|auto:mission|auto:loiter|auto:rtl|auto:takeoff|auto:land|auto:precland",
 			"Flight mode", false);
 	PRINT_MODULE_USAGE_COMMAND("lockdown");
 	PRINT_MODULE_USAGE_ARG("off", "Turn lockdown off", true);

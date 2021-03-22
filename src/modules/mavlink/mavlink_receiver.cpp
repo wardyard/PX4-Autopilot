@@ -41,7 +41,6 @@
  */
 
 #include <airspeed/airspeed.h>
-#include <commander/px4_custom_mode.h>
 #include <conversion/rotation.h>
 #include <drivers/drv_rc_input.h>
 #include <ecl/geo/geo.h>
@@ -506,10 +505,10 @@ void MavlinkReceiver::handle_message_command_both(mavlink_message_t *msg, const 
 		// index should be 0, otherwise ignore the message
 		if (((int) vehicle_command.param7) == 0) {
 			actuator_controls_s actuator_controls{};
-			actuator_controls.timestamp = hrt_absolute_time();
-
 			// update with existing values to avoid changing unspecified controls
 			_actuator_controls_3_sub.update(&actuator_controls);
+
+			actuator_controls.timestamp = hrt_absolute_time();
 
 			bool updated = false;
 
@@ -930,8 +929,8 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 		setpoint.thrust[1] = NAN;
 		setpoint.thrust[2] = NAN;
 
-		setpoint.yaw      = (type_mask == POSITION_TARGET_TYPEMASK_YAW_IGNORE)      ? NAN : target_local_ned.yaw;
-		setpoint.yawspeed = (type_mask == POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE) ? NAN : target_local_ned.yaw_rate;
+		setpoint.yaw      = (type_mask & POSITION_TARGET_TYPEMASK_YAW_IGNORE)      ? NAN : target_local_ned.yaw;
+		setpoint.yawspeed = (type_mask & POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE) ? NAN : target_local_ned.yaw_rate;
 
 
 		offboard_control_mode_s ocm{};
@@ -1054,8 +1053,8 @@ MavlinkReceiver::handle_message_set_position_target_global_int(mavlink_message_t
 		setpoint.thrust[1] = NAN;
 		setpoint.thrust[2] = NAN;
 
-		setpoint.yaw      = (type_mask == POSITION_TARGET_TYPEMASK_YAW_IGNORE)      ? NAN : target_global_int.yaw;
-		setpoint.yawspeed = (type_mask == POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE) ? NAN : target_global_int.yaw_rate;
+		setpoint.yaw      = (type_mask & POSITION_TARGET_TYPEMASK_YAW_IGNORE)      ? NAN : target_global_int.yaw;
+		setpoint.yawspeed = (type_mask & POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE) ? NAN : target_global_int.yaw_rate;
 
 
 		offboard_control_mode_s ocm{};
@@ -1399,7 +1398,7 @@ MavlinkReceiver::handle_message_set_attitude_target(mavlink_message_t *msg)
 
 			// TODO: review use case
 			attitude_setpoint.yaw_sp_move_rate = (type_mask & ATTITUDE_TARGET_TYPEMASK_BODY_YAW_RATE_IGNORE) ?
-							     attitude_target.body_yaw_rate : NAN;
+							     NAN : attitude_target.body_yaw_rate;
 
 			if (!(attitude_target.type_mask & ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE)) {
 				fill_thrust(attitude_setpoint.thrust_body, vehicle_status.vehicle_type, attitude_target.thrust);

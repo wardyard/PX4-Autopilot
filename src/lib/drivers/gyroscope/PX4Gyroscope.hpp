@@ -1,3 +1,4 @@
+
 /****************************************************************************
  *
  *   Copyright (c) 2018-2020 PX4 Development Team. All rights reserved.
@@ -60,6 +61,8 @@ public:
 	void update(const hrt_abstime &timestamp_sample, float x, float y, float z);
 
 	void updateFIFO(sensor_gyro_fifo_s &sample);
+
+	int get_instance() { return _sensor_pub.get_instance(); };
 
 private:
 	void Publish(const hrt_abstime &timestamp_sample, float x, float y, float z, uint8_t samples = 1);
