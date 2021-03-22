@@ -37,6 +37,7 @@
  *
  * @author Lorenz Meier <lorenz@px4.io>
  * @author Anton Babushkin <anton.babushkin@me.com>
+ * @author Ward Bogaerts, ward.bogaerts@aerodelft.nl EDITS ARE MARKED WITH *
  */
 
 #include "mavlink_main.h"
@@ -97,6 +98,8 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_status_flags.h>
 #include <uORB/topics/vtol_vehicle_status.h>
+//#include <uORB/topics/video_monitor.h> 		//*
+#include <uORB/topics/fc_values.h>		//*
 
 using matrix::Vector3f;
 using matrix::wrap_2pi;
@@ -136,6 +139,9 @@ using matrix::wrap_2pi;
 #include "streams/STORAGE_INFORMATION.hpp"
 #include "streams/TRAJECTORY_REPRESENTATION_WAYPOINTS.hpp"
 #include "streams/WIND_COV.hpp"
+//#include "streams/VIDEO_MONITOR.hpp"	//*
+#include "streams/FC_VALUES.hpp"	//*
+
 
 #if !defined(CONSTRAINED_FLASH)
 # include "streams/DEBUG.hpp"
@@ -3565,8 +3571,14 @@ static const StreamListItem streams_list[] = {
 	create_stream_list_item<MavlinkStreamComponentInformation>(),
 #endif // COMPONENT_INFORMATION_HPP
 #if defined(RAW_RPM_HPP)
-	create_stream_list_item<MavlinkStreamRawRpm>()
+	create_stream_list_item<MavlinkStreamRawRpm>(),
 #endif // RAW_RPM_HPP
+//#if defined(VIDEO_MON_HPP)
+//    create_stream_list_item<MavlinkStreamVideoMonitor>(),
+//#endif // VIDEO_MON_HPP					//*
+#if defined(FC_VALUES_HPP)
+    create_stream_list_item<MavlinkStreamFCValues>()
+#endif // FC_VALUES_HPP					//*
 };
 
 const char *get_stream_name(const uint16_t msg_id)
